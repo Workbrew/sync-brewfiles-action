@@ -1,0 +1,171 @@
+name: 'Sync Brewfiles to Workbrew'
+description: 'Sync Brewfiles from your repository to Workbrew workspace'
+author: 'Workbrew'
+
+inputs:
+  api-token:
+    description: 'Workbrew API token'
+    required: true
+  workspace-name:
+    description: 'Workbrew workspace name'
+    required: true
+  brewfiles-dir:
+    description: 'Directory containing Brewfiles'
+    required: false
+    default: 'brewfiles'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Environment
+      id: setup
+      shell: bash
+      run: |
+        set -e
+
+        if [[ -z "${{ inputs.api-token }}" ]]; then
+          echo "::error::api-token input is required."; exit 1
+        fi
+        if [[ -z "${{ inputs.workspace-name }}" ]]; then
+          echo "::error::workspace-name input is required."; exit 1
+        fi
+        if [[ ! -d "${{ inputs.brewfiles-dir }}" ]]; then
+          echo "::notice::Directory '${{ inputs.brewfiles-dir }}' not found. Nothing to sync."
+          echo "skip=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # These variables are written to GITHUB_ENV to be used in subsequent steps.
+        {
+          echo "API_URL_BASE=https://console.workbrew.com/workspaces/${{ inputs.workspace-name }}/brewfiles"
+          echo "API_VERSION_HEADER=X-workbrew-api-version: v0"
+          echo "ACCEPT_HEADER=Accept: application/json"
+          echo "CONTENT_TYPE_HEADER=Content-Type: application/json"
+          echo "AUTH_HEADER=Authorization: Bearer ${{ inputs.api-token }}"
+          echo "BREWFILES_DIR=${{ inputs.brewfiles-dir }}"
+        } >> "$GITHUB_ENV"
+        
+        echo "::notice::API configuration exported."
+
+    - name: Fetch Remote Brewfiles
+      id: fetch_remote
+      shell: bash
+      run: |
+        set -e
+
+        echo "Fetching remote Brewfiles from Workbrew..."
+
+        curl --silent --fail \
+             --header "${AUTH_HEADER}" \
+             --header "${API_VERSION_HEADER}" \
+             --header "${ACCEPT_HEADER}" \
+             "${API_URL_BASE}.json" > remote_brewfiles.json
+        
+        echo "skip=false" >> $GITHUB_OUTPUT
+        echo "::notice::Remote brewfiles saved to remote_brewfiles.json"
+
+    - name: Sync Local Brewfiles
+      id: sync
+      if: steps.fetch_remote.outputs.skip == 'false'
+      shell: bash
+      run: |
+        set -e
+        
+        declare -A remote_brewfiles
+
+        while IFS= read -r label; do
+            if [[ -z "$label" ]]; then
+                continue # Skip empty lines, if any
+            fi
+            IFS= read -r content_base64
+            if [[ -z "$content_base64" ]]; then
+                echo "Error: JQ output malformed. Missing content for label: '$label'" >&2
+                exit 1
+            fi
+
+            content=$(base64 --decode <<<"$content_base64")
+            remote_brewfiles["$label"]="$content"
+        done < <(jq --raw-output '.[] | select(.label != null and .label != "") | .label, (.content | @base64)' remote_brewfiles.json)
+        
+        echo "::notice::Found ${#remote_brewfiles[@]} remote brewfiles to process."
+
+        for file_path in "$BREWFILES_DIR"/*; do
+          if [[ ! -f "$file_path" ]]; then continue; fi
+
+          label=$(basename "$file_path")
+          first_line=$(head -n 1 "$file_path")
+          content=$(<"$file_path") # Reads entire file
+
+          device_target_key="device_serial_numbers"
+          device_target_value="none"
+
+          if [[ "$first_line" =~ ^#\ (device_group_id|device_serial_numbers):\ (.*)$ ]]; then
+              device_target_key="${BASH_REMATCH[1]}"
+              device_target_value=$(xargs <<<"${BASH_REMATCH[2]}") # Trim whitespace
+          fi
+
+          if [[ -v "remote_brewfiles[$label]" ]]; then
+            if [[ "${remote_brewfiles[$label]}" != "$content" ]]; then
+              echo "::notice::Updating brewfile: $label"
+              encoded_label=$(jq --raw-output --null-input --arg v "$label" '$v|@uri')
+
+              json_payload=$(jq --null-input \
+                --arg content "$content" \
+                --arg device_target_key "$device_target_key" \
+                --arg device_target_value "$device_target_value" \
+                '{content: $content} + { ($device_target_key): $device_target_value }')
+
+              curl --silent --fail \
+                --request PUT \
+                --header "$AUTH_HEADER" \
+                --header "$API_VERSION_HEADER" \
+                --header "$CONTENT_TYPE_HEADER" \
+                --data "$json_payload" \
+                "${API_URL_BASE}/$encoded_label.json" > /dev/null
+             else
+              echo "::notice::Brewfile '$label' is already up to date."
+            fi
+            unset "remote_brewfiles[$label]"
+          else
+            echo "::notice::Creating new brewfile: $label"
+
+            json_payload=$(jq --null-input \
+              --arg label "$label" \
+              --arg content "$content" \
+              --arg device_target_key "$device_target_key" \
+              --arg device_target_value "$device_target_value" \
+              '{label: $label, content: $content} + { ($device_target_key): $device_target_value }')
+
+            curl --silent --fail \
+              --request POST \
+              --header "$AUTH_HEADER" \
+              --header "$API_VERSION_HEADER" \
+              --header "$CONTENT_TYPE_HEADER" \
+              --data "$json_payload" \
+              "${API_URL_BASE}.json" > /dev/null
+          fi
+        done
+
+        echo "::notice::Deleting remote brewfiles not found locally..."
+
+        for label in "${!remote_brewfiles[@]}"; do
+            echo "::notice::Deleting brewfile: $label"
+
+            encoded_label=$(jq --raw-output --null-input --arg v "$label" '$v|@uri')
+
+            if ! curl --silent --fail \
+              --request DELETE \
+              --header "$AUTH_HEADER" \
+              --header "$API_VERSION_HEADER" \
+              --header "$ACCEPT_HEADER" \
+              "${API_URL_BASE}/$encoded_label"; then
+                echo "::error::Failed to delete brewfile '$label'."
+                exit 1
+            fi
+        done
+
+        echo "Sync complete."
+
+branding:
+  icon: 'package'
+  color: 'blue'
