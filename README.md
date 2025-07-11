@@ -8,7 +8,15 @@ This Action treats your repository as the source of truth. The action fetches al
 
 Device targeting is automatic: add a comment at the top of your Brewfile to target a device group or serial numbers. If you don’t, it defaults to no devices. Example Brewfiles:
 
-1. Target a specific device group
+1. Target all devices
+
+```ruby
+# device_serial_numbers: all
+brew "curl"
+cask "1password"
+```
+
+2. Target a device group
 
 ```ruby
 # device_group_id: e6c10d0-0b13-554c-b976-a05d8a18f0cc
@@ -16,7 +24,7 @@ brew "curl"
 cask "1password"
 ```
 
-2. Target specific devices by serial numbers
+3. Target specific devices by serial numbers[^1]
 
 ```ruby
 # device_serial_numbers: AB3456DG90,1234567890
@@ -24,7 +32,7 @@ brew "curl"
 cask "1password"
 ```
 
-3. Default behavior (no targeting comment)
+4. Default behavior (no targeting)
 
 ```ruby
 brew "curl"
@@ -75,3 +83,5 @@ You can also trigger it manually or on a schedule. But for most teams, syncing o
 
 Are you a Workbrew customer struggling to implement this action? Contact your account manager and we're happy to help.
 Not a Workbrew customer yet? [Reach out to talk about becoming one](https://workbrew.com/contact).
+
+[^1]: You can get device serial numbers from either [the API](https://console.workbrew.com/documentation/api#:~:text=Returns%20a%20list%20of%20Device%20Groups) (Pro & Enterprise) or by manually exporting on the Device Groups page (Enterprise only).
