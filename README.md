@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: workbrew/sync-brewfiles-action@v1
+      - uses: workbrew/sync-brewfiles-action@1.0.0
         with:
           api-token: ${{ secrets.WORKBREW_API_TOKEN }}
           workspace-name: ${{ secrets.WORKBREW_WORKSPACE_NAME }}
