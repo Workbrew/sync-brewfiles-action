@@ -81,6 +81,8 @@ jobs:
 
 You can also trigger it manually or on a schedule. But for most teams, syncing on push is all you need.
 
+By using this software, you agree to the [Workbrew Terms of Service](https://workbrew.com/terms-of-service) and [Privacy Policy](https://workbrew.com/privacy-policy).
+
 Are you a Workbrew customer struggling to implement this action? Contact your account manager and we're happy to help.
 Not a Workbrew customer yet? [Reach out to talk about becoming one](https://workbrew.com/contact).
 
