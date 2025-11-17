@@ -70,12 +70,18 @@ runs:
       shell: bash
       run: |
         set -e
-        
+
         declare -A remote_brewfiles
+        declare -A remote_brewfile_slugs
 
         while IFS= read -r label; do
             if [[ -z "$label" ]]; then
                 continue # Skip empty lines, if any
+            fi
+            IFS= read -r slug
+            if [[ -z "$slug" ]]; then
+                echo "Error: JQ output malformed. Missing slug for label: '$label'" >&2
+                exit 1
             fi
             IFS= read -r content_base64
             if [[ -z "$content_base64" ]]; then
@@ -85,7 +91,8 @@ runs:
 
             content=$(base64 --decode <<<"$content_base64")
             remote_brewfiles["$label"]="$content"
-        done < <(jq --raw-output '.[] | select(.label != null and .label != "") | .label, (.content | @base64)' remote_brewfiles.json)
+            remote_brewfile_slugs["$label"]="$slug"
+        done < <(jq --raw-output '.[] | select(.label != null and .label != "") | .label, .slug, (.content | @base64)' remote_brewfiles.json)
         
         echo "::notice::Found ${#remote_brewfiles[@]} remote brewfiles to process."
 
@@ -107,7 +114,8 @@ runs:
           if [[ -v "remote_brewfiles[$label]" ]]; then
             if [[ "${remote_brewfiles[$label]}" != "$content" ]]; then
               echo "::notice::Updating brewfile: $label"
-              encoded_label=$(jq --raw-output --null-input --arg v "$label" '$v|@uri')
+              slug="${remote_brewfile_slugs[$label]}"
+              encoded_slug=$(jq --raw-output --null-input --arg v "$slug" '$v|@uri')
 
               json_payload=$(jq --null-input \
                 --arg content "$content" \
@@ -121,7 +129,7 @@ runs:
                 --header "$API_VERSION_HEADER" \
                 --header "$CONTENT_TYPE_HEADER" \
                 --data "$json_payload" \
-                "${API_URL_BASE}/$encoded_label.json" > /dev/null
+                "${API_URL_BASE}/$encoded_slug.json" > /dev/null
              else
               echo "::notice::Brewfile '$label' is already up to date."
             fi
@@ -135,7 +143,6 @@ runs:
               --arg device_target_key "$device_target_key" \
               --arg device_target_value "$device_target_value" \
               '{label: $label, content: $content} + { ($device_target_key): $device_target_value }')
-
             curl --silent --fail \
               --request POST \
               --header "$AUTH_HEADER" \
@@ -151,14 +158,15 @@ runs:
         for label in "${!remote_brewfiles[@]}"; do
             echo "::notice::Deleting brewfile: $label"
 
-            encoded_label=$(jq --raw-output --null-input --arg v "$label" '$v|@uri')
+            slug="${remote_brewfile_slugs[$label]}"
+            encoded_slug=$(jq --raw-output --null-input --arg v "$slug" '$v|@uri')
 
             if ! curl --silent --fail \
               --request DELETE \
               --header "$AUTH_HEADER" \
               --header "$API_VERSION_HEADER" \
               --header "$ACCEPT_HEADER" \
-              "${API_URL_BASE}/$encoded_label"; then
+              "${API_URL_BASE}/$encoded_slug"; then
                 echo "::error::Failed to delete brewfile '$label'."
                 exit 1
             fi
