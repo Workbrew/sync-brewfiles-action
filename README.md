@@ -52,10 +52,18 @@ your-repo/
 │  ├─ workflows/
 │  │  ├─ sync-brewfiles.yml
 ```
+---
 
-## Triggers
+## GitHub Actions workflow (`sync-brewfiles.yml`)
 
-You can run this Action on any GitHub Actions trigger. The best way is to run it on every push to your main branch, but only when Brewfiles change. Here’s the recommended setup:
+To keep your Brewfiles synced automatically, you’ll create a GitHub Actions workflow in your own repository.
+
+> **Where to put it**
+> Create a file at:
+> **`.github/workflows/sync-brewfiles.yml`**
+
+Below is a **complete example** workflow you can use as-is.
+This workflow runs every time you push changes to files inside your `brewfiles/` directory.
 
 ```yaml
 name: Sync Brewfiles
@@ -79,8 +87,27 @@ jobs:
           brewfiles-dir: brewfiles
 ```
 
-You can also trigger it manually or on a schedule. But for most teams, syncing on push is all you need.
+> **Important**
+> You do **not** copy the `action.yml` file from this repository.
+> That file defines the Action itself.
+> Your workflow file (`sync-brewfiles.yml`) *uses* the Action via:
+>
+> ```yaml
+> - uses: workbrew/sync-brewfiles-action@1.0.0
+> ```
 
+---
+
+## Why this trigger?
+
+You can run this Action on any GitHub Actions trigger (manually, on a schedule, etc.).
+For most teams, the setup above is ideal because:
+
+* It only runs when a Brewfile actually changes
+* It applies changes immediately after you merge to `main`
+* It keeps your Workbrew Brewfiles in sync with your repo with zero manual steps
+
+---
 By using this software, you agree to the [Workbrew Terms of Service](https://workbrew.com/terms-of-service) and [Privacy Policy](https://workbrew.com/privacy-policy).
 
 Are you a Workbrew customer struggling to implement this action? Contact your account manager and we're happy to help.
