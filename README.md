@@ -96,6 +96,9 @@ jobs:
 > - uses: workbrew/sync-brewfiles-action@1.0.0
 > ```
 
+> [!NOTE]
+> For the `WORKBREW_API_TOKEN` please use your USER API KEY.
+
 ---
 
 ## Why this trigger?
